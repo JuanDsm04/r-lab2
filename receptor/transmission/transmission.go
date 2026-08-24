@@ -13,30 +13,38 @@ import (
 
 const Puerto = "55432"
 
-// RecibirInformacion inicia el servidor TCP y retorna la trama recibida.
-// Bloquea hasta recibir una conexión entrante.
-// Retorna la trama completa como string (formato "algoritmo|bits").
-func RecibirInformacion(listener net.Listener) (string, error) {
+// RecibirInformacion espera una conexión entrante y retorna la trama recibida
+// (formato "algoritmo|bits") junto con la conexión, que queda abierta para
+// poder responderle al emisor. Quien la recibe es responsable de cerrarla.
+func RecibirInformacion(listener net.Listener) (string, net.Conn, error) {
 	fmt.Println("[TRANSMISION] Esperando conexión del emisor...")
 
 	conn, err := listener.Accept()
 	if err != nil {
-		return "", fmt.Errorf("error aceptando conexión: %w", err)
+		return "", nil, fmt.Errorf("error aceptando conexión: %w", err)
 	}
-	defer conn.Close()
 
 	fmt.Printf("[TRANSMISION] Conexión recibida desde: %s\n", conn.RemoteAddr())
 
 	// Leer todos los bytes enviados
 	datos, err := io.ReadAll(conn)
 	if err != nil {
-		return "", fmt.Errorf("error leyendo datos: %w", err)
+		conn.Close()
+		return "", nil, fmt.Errorf("error leyendo datos: %w", err)
 	}
 
 	trama := string(datos)
 	fmt.Printf("[TRANSMISION] Trama recibida (%d bytes).\n", len(datos))
 
-	return trama, nil
+	return trama, conn, nil
+}
+
+// EnviarRespuesta devuelve al emisor el veredicto del procesamiento:
+// "OK|mensaje" si la trama se recuperó, "ERR|motivo" si no fue posible.
+func EnviarRespuesta(conn net.Conn, respuesta string) {
+	if _, err := conn.Write([]byte(respuesta)); err != nil {
+		fmt.Printf("[TRANSMISION] Error enviando respuesta al emisor: %v\n", err)
+	}
 }
 
 // IniciarServidor crea el listener TCP en el puerto definido.

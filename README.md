@@ -32,6 +32,13 @@ Ejemplos:
 - `hamming|010010011000011001001`
 - `crc32|01001000...10100010101110110010000011110001`
 
+Tras procesar la trama, el receptor responde por el mismo socket con su veredicto:
+
+```
+OK|mensaje_recuperado     ← la trama se recuperó
+ERR|motivo                ← error irrecuperable, trama descartada
+```
+
 ---
 
 ## Requisitos
@@ -89,7 +96,12 @@ lab2-redes/
 │   ├── noise/
 │   │   └── noise.py                 # Aplica ruido bit a bit según tasa de error
 │   └── transmission/
-│       └── transmission.py          # Socket TCP cliente: envía trama al receptor
+│       └── transmission.py          # Socket TCP cliente: envía trama y lee el veredicto
+│
+├── pruebas/                         # Pruebas automatizadas y gráficas
+│   ├── pruebas.py                   # Batería de envíos reales → resultados.csv
+│   ├── graficas.py                  # resultados.csv → gráficas PNG
+│   └── requirements.txt             # matplotlib (solo para las gráficas)
 │
 └── receptor/                        # Go — lado del receptor
     ├── main.go                      # Entry point: loop de recepción
@@ -144,6 +156,52 @@ Tasa de error [0.0 - 1.0]: 0.01
   "Hello"
 ===================================================
 ```
+
+---
+
+## Pruebas
+
+Las pruebas envían mensajes reales por el stack completo (capas del emisor → socket → receptor
+en Go) variando **algoritmo**, **tamaño del mensaje** y **tasa de error**, y clasifican la
+respuesta del receptor en tres casos:
+
+| Resultado | Significado |
+|---|---|
+| `correcto` | El receptor entregó exactamente el mensaje original |
+| `detectado` | El receptor detectó el error y descartó la trama |
+| `no_detectado` | El receptor entregó un mensaje distinto sin darse cuenta (peor caso) |
+
+### Ejecución
+
+```bash
+pip install -r pruebas/requirements.txt
+
+# Terminal 1
+cd receptor && go run main.go > /dev/null
+
+# Terminal 2
+python pruebas/pruebas.py 100     # 100 repeticiones por combinación (4200 envíos)
+python pruebas/graficas.py
+```
+
+### Configuración
+
+Las combinaciones se definen al inicio de `pruebas/pruebas.py`:
+
+```python
+ALGORITMOS = ["hamming", "crc32"]
+TAMANOS    = [4, 16, 64]                                   # caracteres por mensaje
+TASAS      = [0.0, 0.0005, 0.001, 0.005, 0.01, 0.02, 0.05] # errores por bit
+```
+
+### Salidas
+
+| Archivo | Contenido |
+|---|---|
+| `pruebas/resultados.csv` | Una fila por envío: algoritmo, tamaño, bits de datos, bits de trama, overhead, tasa, errores introducidos y resultado |
+| `pruebas/grafica_exito.png` | % de mensajes entregados correctamente vs tasa de error, por algoritmo y tamaño |
+| `pruebas/grafica_desglose.png` | Desglose correcto / detectado / no detectado por algoritmo y tasa |
+| `pruebas/grafica_overhead.png` | Overhead (bits de redundancia / bits de datos) por algoritmo y tamaño |
 
 ---
 

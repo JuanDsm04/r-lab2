@@ -30,33 +30,41 @@ func main() {
 		fmt.Println("\nEsperando nuevo mensaje...")
 
 		// Capa de Transmisión
-		trama, err := transmission.RecibirInformacion(listener)
+		trama, conn, err := transmission.RecibirInformacion(listener)
 		if err != nil {
 			fmt.Printf("[TRANSMISION] Error recibiendo trama: %v\n", err)
 			continue
 		}
 
-		// Capa de Enlace
-		resultado := link.VerificarIntegridad(trama)
-
-		if resultado.HayError {
-			// Error irrecuperable:
-			fmt.Printf("[ENLACE] Error irrecuperable: %s\n", resultado.MensajeError)
-			application.MostrarMensaje("", true, resultado.MensajeError)
-			continue
-		}
-
-		// Capa de Presentación
-		fmt.Println("[PRESENTACION] Decodificando bits ASCII a texto...")
-		mensaje, err := presentation.DecodificarMensaje(resultado.BitsMensaje)
-		if err != nil {
-			errMsg := fmt.Sprintf("error de presentación: %v", err)
-			fmt.Printf("[PRESENTACION] %s\n", errMsg)
-			application.MostrarMensaje("", true, errMsg)
-			continue
-		}
-
-		// Capa de Aplicación
-		application.MostrarMensaje(mensaje, false, "")
+		transmission.EnviarRespuesta(conn, procesarTrama(trama))
+		conn.Close()
 	}
+}
+
+// procesarTrama hace subir la trama por las capas de enlace, presentación y
+// aplicación. Retorna el veredicto que se le informa al emisor.
+func procesarTrama(trama string) string {
+	// Capa de Enlace
+	resultado := link.VerificarIntegridad(trama)
+
+	if resultado.HayError {
+		// Error irrecuperable:
+		fmt.Printf("[ENLACE] Error irrecuperable: %s\n", resultado.MensajeError)
+		application.MostrarMensaje("", true, resultado.MensajeError)
+		return "ERR|" + resultado.MensajeError
+	}
+
+	// Capa de Presentación
+	fmt.Println("[PRESENTACION] Decodificando bits ASCII a texto...")
+	mensaje, err := presentation.DecodificarMensaje(resultado.BitsMensaje)
+	if err != nil {
+		errMsg := fmt.Sprintf("error de presentación: %v", err)
+		fmt.Printf("[PRESENTACION] %s\n", errMsg)
+		application.MostrarMensaje("", true, errMsg)
+		return "ERR|" + errMsg
+	}
+
+	// Capa de Aplicación
+	application.MostrarMensaje(mensaje, false, "")
+	return "OK|" + mensaje
 }
